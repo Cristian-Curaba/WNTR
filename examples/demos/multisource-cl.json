@@ -1,0 +1,82 @@
+{
+    "version": "wntr-1.3.0rc2",
+    "name": null,
+    "title": "Multisource Chlorine Decay",
+    "description": null,
+    "references": [
+        "(2023) Shang F, L Rossman, and J Uber. \n\"EPANET-MSX 2.0 User Manual\". EPA/600/R-22/199"
+    ],
+    "reaction_system": {
+        "species": [
+            {
+                "name": "T1",
+                "species_type": "bulk",
+                "units": "MG",
+                "atol": null,
+                "rtol": null,
+                "note": "Source 1 Tracer"
+            },
+            {
+                "name": "CL2",
+                "species_type": "bulk",
+                "units": "MG",
+                "atol": null,
+                "rtol": null,
+                "note": "Free Chlorine"
+            }
+        ],
+        "constants": [
+            {
+                "name": "k1",
+                "value": 1.3,
+                "units": "1/day"
+            },
+            {
+                "name": "k2",
+                "value": 17.7,
+                "units": "1/day"
+            }
+        ],
+        "parameters": [],
+        "terms": [],
+        "pipe_reactions": [
+            {
+                "species_name": "T1",
+                "expression_type": "rate",
+                "expression": "0"
+            },
+            {
+                "species_name": "CL2",
+                "expression_type": "rate",
+                "expression": "-(k1*T1 + k2*(1-T1))*CL2"
+            }
+        ],
+        "tank_reactions": []
+    },
+    "network_data": {
+        "initial_quality": {},
+        "parameter_values": {},
+        "sources": {},
+        "patterns": {}
+    },
+    "options": {
+        "timestep": 300,
+        "area_units": "FT2",
+        "rate_units": "DAY",
+        "solver": "RK5",
+        "coupling": "NONE",
+        "rtol": 0.0001,
+        "atol": 0.0001,
+        "compiler": "NONE",
+        "segments": 5000,
+        "peclet": 1000,
+        "report": {
+            "pagesize": null,
+            "report_filename": null,
+            "species": {},
+            "species_precision": {},
+            "nodes": null,
+            "links": null
+        }
+    }
+}

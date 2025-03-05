@@ -1,0 +1,7 @@
+{
+"type": "FeatureCollection",
+"features": [
+{ "type": "Feature", "properties": { "name": "River", "initial_quality": 0.0, "base_head": 67.056, "head_pattern_name": null }, "geometry": { "type": "Point", "coordinates": [ 24.15, 31.06 ] } },
+{ "type": "Feature", "properties": { "name": "Lake", "initial_quality": 0.0, "base_head": 50.9016, "head_pattern_name": null }, "geometry": { "type": "Point", "coordinates": [ 8.0, 27.53 ] } }
+]
+}

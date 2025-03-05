@@ -1,0 +1,82 @@
+; WNTR-reactions MSX file generated 2025-01-31 12:19:34.953249
+
+[TITLE]
+  Arsenic Oxidation/Adsorption Example
+
+[OPTIONS]
+  AREA_UNITS  M2
+  RATE_UNITS  HR
+  SOLVER      RK5
+  COUPLING    NONE
+  TIMESTEP    360
+  ATOL        0.0001
+  RTOL        0.001
+  COMPILER    NONE
+  SEGMENTS    5000
+  PECLET      1000
+
+[SPECIES]
+  BULK         AS3      UG       ; Dissolved arsenite
+  BULK         AS5      UG       ; Dissolved arsenate
+  BULK         AStot    UG       ; Total dissolved arsenic
+  WALL         AS5s     UG       ; Adsorbed arsenate
+  BULK         NH2CL    MG       ; Monochloramine
+
+[COEFFICIENTS]
+  CONSTANT     Ka       10.0             ; Arsenite oxidation rate coefficient
+  CONSTANT     Kb       0.1              ; Monochloramine decay rate coefficient
+  CONSTANT     K1       5.0              ; Arsenate adsorption coefficient
+  CONSTANT     K2       1.0              ; Arsenate desorption coefficient
+  CONSTANT     Smax     50.0             ; Arsenate adsorption saturation limit
+
+[TERMS]
+  Ks       K1/K2                                                            ; Equil. adsorption coeff.
+
+[PIPES]
+
+; Arsenite oxidation
+
+  RATE         AS3      -Ka*AS3*NH2CL                   
+
+; Arsenate production
+
+  RATE         AS5      Ka*AS3*NH2CL - Av*(K1*(Smax-AS5s)*AS5 - K2*AS5s)
+
+; Total bulk arsenic
+
+  FORMULA      AStot    AS3 + AS5                       
+
+; Arsenate adsorption
+
+  EQUIL        AS5s     Ks*Smax*AS5/(1+Ks*AS5) - AS5s   
+
+; Monochloramine decay
+
+  RATE         NH2CL    -Kb*NH2CL                       
+
+[TANKS]
+  RATE         AS3      -Ka*AS3*NH2CL                   
+  RATE         AS5      Ka*AS3*NH2CL                    
+  FORMULA      AStot    AS3 + AS5                       
+  RATE         NH2CL    -Kb*NH2CL                       
+
+[DIFFUSIVITY]
+
+[PARAMETERS]
+
+[PATTERNS]
+
+[REPORT]
+  NODES     C D
+  LINKS     5
+  SPECIES   AStot    YES 
+  SPECIES   AS5      YES 
+  SPECIES   AS5s     YES 
+  SPECIES   NH2CL    YES 
+
+[QUALITY]
+  NODE     Source   AS3      10.0
+  NODE     Source   NH2CL    2.5
+
+[SOURCES]
+

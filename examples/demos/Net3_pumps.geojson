@@ -1,0 +1,7 @@
+{
+"type": "FeatureCollection",
+"features": [
+{ "type": "Feature", "properties": { "name": "10", "start_node_name": "Lake", "end_node_name": "10", "initial_quality": 0.0, "initial_status": "Closed", "pump_type": "HEAD", "base_speed": 1.0, "pump_curve_name": "1", "power": null, "speed_pattern_name": null }, "geometry": { "type": "Point", "coordinates": [ 8.0, 27.53 ] } },
+{ "type": "Feature", "properties": { "name": "335", "start_node_name": "60", "end_node_name": "61", "initial_quality": 0.0, "initial_status": "Open", "pump_type": "HEAD", "base_speed": 1.0, "pump_curve_name": "2", "power": null, "speed_pattern_name": null }, "geometry": { "type": "Point", "coordinates": [ 23.9, 29.94 ] } }
+]
+}

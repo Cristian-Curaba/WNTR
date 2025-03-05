@@ -1,0 +1,48 @@
+; WNTR-reactions MSX file generated 2025-01-31 12:18:56.126529
+
+[TITLE]
+  Multisource Chlorine Decay
+
+[OPTIONS]
+  AREA_UNITS  FT2
+  RATE_UNITS  DAY
+  SOLVER      RK5
+  COUPLING    NONE
+  TIMESTEP    300
+  ATOL        0.0001
+  RTOL        0.0001
+  COMPILER    NONE
+  SEGMENTS    5000
+  PECLET      1000
+
+[SPECIES]
+  BULK         T1       MG       ; Source 1 Tracer
+  BULK         CL2      MG       ; Free Chlorine
+
+[COEFFICIENTS]
+  CONSTANT     k1       1.3             
+  CONSTANT     k2       17.7            
+
+[TERMS]
+
+[PIPES]
+  RATE         T1       0                               
+  RATE         CL2      -(k1*T1 + k2*(1-T1))*CL2        
+
+[TANKS]
+
+[DIFFUSIVITY]
+
+[PARAMETERS]
+
+[PATTERNS]
+
+[REPORT]
+
+[QUALITY]
+  NODE     River    T1       1.0
+  NODE     River    CL2      1.2
+  NODE     Lake     CL2      1.2
+
+[SOURCES]
+

@@ -1,0 +1,11 @@
+{
+"type": "FeatureCollection",
+"crs": { "type": "name", "properties": { "name": "urn:ogc:def:crs:EPSG::3089" } },
+"features": [
+{ "type": "Feature", "properties": { "name": "~@RV-1", "start_node_name": "I-RV-1", "end_node_name": "O-RV-1", "diameter": 25.4, "initial_quality": 0.0, "initial_setting": 28.13051465497346, "initial_status": "Active", "minor_loss": 0.0, "valve_type": "PRV" }, "geometry": { "type": "LineString", "coordinates": [ [ 5746586.740000000223517, 3877834.0 ], [ 5746586.740000000223517, 3877834.0 ] ] } },
+{ "type": "Feature", "properties": { "name": "~@RV-2", "start_node_name": "I-RV-2", "end_node_name": "O-RV-2", "diameter": 25.4, "initial_quality": 0.0, "initial_setting": 56.275098084468034, "initial_status": "Active", "minor_loss": 0.0, "valve_type": "PRV" }, "geometry": { "type": "LineString", "coordinates": [ [ 5773863.900000000372529, 3813492.0 ], [ 5773863.900000000372529, 3813492.0 ] ] } },
+{ "type": "Feature", "properties": { "name": "~@RV-3", "start_node_name": "I-RV-3", "end_node_name": "O-RV-3", "diameter": 25.4, "initial_quality": 0.0, "initial_setting": 28.13051465497346, "initial_status": "Active", "minor_loss": 0.0, "valve_type": "PRV" }, "geometry": { "type": "LineString", "coordinates": [ [ 5792438.08, 3833485.0 ], [ 5792438.08, 3833485.0 ] ] } },
+{ "type": "Feature", "properties": { "name": "~@RV-4", "start_node_name": "I-RV-4", "end_node_name": "O-RV-4", "diameter": 25.4, "initial_quality": 0.0, "initial_setting": 98.474387260558515, "initial_status": "Active", "minor_loss": 0.0, "valve_type": "PRV" }, "geometry": { "type": "LineString", "coordinates": [ [ 5774432.269999999552965, 3821711.0 ], [ 5774432.269999999552965, 3821711.0 ] ] } },
+{ "type": "Feature", "properties": { "name": "~@RV-5", "start_node_name": "I-RV-5", "end_node_name": "O-RV-5", "diameter": 25.4, "initial_quality": 0.0, "initial_setting": 105.51580890837756, "initial_status": "Active", "minor_loss": 0.0, "valve_type": "PRV" }, "geometry": { "type": "LineString", "coordinates": [ [ 5755909.650000000372529, 3840391.0 ], [ 5755909.650000000372529, 3840391.0 ] ] } }
+]
+}

@@ -1,0 +1,8 @@
+{
+"type": "FeatureCollection",
+"features": [
+{ "type": "Feature", "properties": { "name": "1", "elevation": 40.20312, "initial_quality": 0.0, "diameter": 25.908, "init_level": 3.99288, "max_level": 9.78408, "min_level": 0.03048, "min_vol": 0.0, "overflow": "0", "vol_curve_name": null }, "geometry": { "type": "Point", "coordinates": [ 27.46, 9.84 ] } },
+{ "type": "Feature", "properties": { "name": "2", "elevation": 35.5092, "initial_quality": 0.0, "diameter": 15.24, "init_level": 7.1628, "max_level": 12.28344, "min_level": 1.9812, "min_vol": 0.0, "overflow": "0", "vol_curve_name": null }, "geometry": { "type": "Point", "coordinates": [ 32.99, 3.45 ] } },
+{ "type": "Feature", "properties": { "name": "3", "elevation": 39.3192, "initial_quality": 0.0, "diameter": 49.9872, "init_level": 8.8392, "max_level": 10.8204, "min_level": 1.2192, "min_vol": 0.0, "overflow": "0", "vol_curve_name": null }, "geometry": { "type": "Point", "coordinates": [ 29.41, 27.27 ] } }
+]
+}
