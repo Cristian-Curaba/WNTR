@@ -32,7 +32,7 @@ def create_hydraulic_model(wn, HW_approx='default'):
     Returns
     -------
     m: wntr.aml.Model
-    model_updater: wntr.models.utils.ModelUpdater
+    model_updater: wntr.models.emergency_pre_analysis.ModelUpdater
     """
     m = aml.Model()
     model_updater = ModelUpdater()
@@ -111,7 +111,7 @@ def update_model_for_controls(m, wn, model_updater, change_tracker):
     ----------
     m: wntr.aml.Model
     wn: wntr.network.WaterNetworkModel
-    model_updater: wntr.models.utils.ModelUpdater
+    model_updater: wntr.models.emergency_pre_analysis.ModelUpdater
     change_tracker: wntr.network.controls.ControlChangeTracker
     """
     for obj, attr in change_tracker.get_changes(ref_point='model'):
@@ -127,7 +127,7 @@ def update_model_for_isolated_junctions_and_links(m, wn, model_updater, prev_iso
     ----------
     m: wntr.aml.Model
     wn: wntr.network.WaterNetworkModel
-    model_updater: wntr.models.utils.ModelUpdater
+    model_updater: wntr.models.emergency_pre_analysis.ModelUpdater
     prev_isolated_junctions: set
     prev_isolated_links: set
     isolated_junctions: set

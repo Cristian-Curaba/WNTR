@@ -1,8 +1,9 @@
 """
-utils/custom_centrality_indexes.py
+emergency_pre_analysis/custom_centrality_indexes.py
 """
 import os
-
+import sys
+from emergency_pre_analysis.utils import *
 from typing import List, Dict, Set, Union
 import wntr
 import networkx as nx
@@ -12,218 +13,13 @@ import itertools
 from math import factorial
 import warnings
 import inspect
+import time
+from functools import wraps
+import logging
+import networkx as nx
+import numpy as np
+from collections import defaultdict
 
-
-def get_source_nodes(wn)->list:
-    """
-    Get source nodes (tanks, reservoirs, and nodes with in-degree of 0) from a water network.
-
-    Parameters:
-    -----------
-    wn : WNTR WaterNetworkModel
-        The water network model
-
-    Returns:
-    --------
-    list
-        List of source node IDs
-    """
-    sources = []
-
-    # Get tanks
-    for tank_name, tank in wn.tanks():
-        sources.append(tank_name)
-
-    # Get reservoirs
-    for reservoir_name, reservoir in wn.reservoirs():
-        sources.append(reservoir_name)
-
-    # Get nodes with in-degree of 0 (no incoming connections)
-    G = wn.get_graph()  # Get the network graph
-
-    for node_name in wn.junction_name_list:
-        # Skip if already identified as a source (tank or reservoir)
-        if node_name in sources:
-            continue
-
-        # Check if node has in-degree of 0
-        if G.in_degree(node_name) == 0:
-            sources.append(node_name)
-
-    print(f"Identified {len(sources)} source nodes: {sources}")
-    return sources
-
-
-def convert_multidigraph_to_digraph(multi_G, weight_attr='weight', aggregation='sum'):
-    """
-    Convert a NetworkX MultiDiGraph to a DiGraph by aggregating parallel edges.
-
-    Parameters:
-    -----------
-    multi_G : NetworkX MultiDiGraph
-        Input multigraph to convert
-    weight_attr : str, default='weight'
-        Edge attribute to use as weight
-    aggregation : str, default='sum'
-        Method to aggregate parallel edge weights: 'sum', 'max', 'min', or 'mean'
-
-    Returns:
-    --------
-    NetworkX DiGraph
-        Simple directed graph with aggregated edge weights
-    """
-    import networkx as nx
-    import numpy as np
-
-    G = nx.DiGraph()
-    G.add_nodes_from(multi_G.nodes(data=True))
-
-    # Group edges by their endpoints and aggregate weights
-    edge_weights = {}
-    edge_data = {}
-
-    for u, v, data in multi_G.edges(data=True):
-        weight = data.get(weight_attr, 1.0)
-        if (u, v) not in edge_weights:
-            edge_weights[(u, v)] = [weight]
-            edge_data[(u, v)] = {k: v for k, v in data.items() if k != weight_attr}
-        else:
-            edge_weights[(u, v)].append(weight)
-
-    # Aggregation functions
-    agg_funcs = {
-        'sum': sum,
-        'max': max,
-        'min': min,
-        'mean': np.mean
-    }
-
-    if aggregation not in agg_funcs:
-        raise ValueError(f"Aggregation must be one of {list(agg_funcs.keys())}")
-
-    # Add edges with aggregated weights
-    for (u, v), weights in edge_weights.items():
-        data = edge_data[(u, v)].copy()
-        data[weight_attr] = agg_funcs[aggregation](weights)
-        G.add_edge(u, v, **data)
-
-    return G
-
-
-def check_unreachable_nodes(G, sources):
-    reachable_nodes = set()
-    for source in sources:
-        for target in G.nodes():
-            if nx.has_path(G, source, target):
-                reachable_nodes.add(target)
-
-    # Print if there's at least one node that is not reachable from any source
-    if len(reachable_nodes) < len(G.nodes()):
-        print("Warning: There are nodes in the graph that are not reachable from any source.")
-        unreachable_nodes = set(G.nodes()) - reachable_nodes
-        print(f"Unreachable nodes: {unreachable_nodes}")
-        return unreachable_nodes
-
-    return None  # Return None if all nodes are reachable
-
-
-def check_and_transform_to_directed_acyclic_graph(G, sources):
-    """
-    Check if a graph is a DAG and transform it if necessary by reversing edges in cycles.
-    Uses a heuristic based on distance from sources to cycle edges.
-
-    Parameters:
-    -----------
-    G : NetworkX DiGraph or MultiDiGraph
-        The input graph to check and transform
-    sources : list
-        List of source nodes to consider for distance calculations
-
-    Returns:
-    --------
-    NetworkX DiGraph
-        A directed acyclic graph
-    """
-    import networkx as nx
-
-    # Ensure we're working with a simple DiGraph
-    if G.is_multigraph():
-        G = convert_multidigraph_to_digraph(G, aggregation='sum')
-
-    # Validate sources
-    for source in sources:
-        if source not in G:
-            raise ValueError(f"Source node {source} not found in graph")
-
-    def find_nearest_cycle_edge(G, sources, cycle):
-        """
-        Find the edge in the cycle that's closest to any source node.
-        Returns (distance, edge, weight) tuple.
-        """
-        min_distance = float('inf')
-        best_edge = None
-        best_weight = float('inf')
-
-        # Create undirected version of graph for distance calculation
-        G_undir = G.to_undirected()
-
-        # Check each edge in the cycle
-        for i in range(len(cycle)):
-            u = cycle[i]
-            v = cycle[(i + 1) % len(cycle)]
-            if not G.has_edge(u, v):
-                continue
-
-            edge_weight = G[u][v].get('weight', 1.0)
-
-            # Find minimum distance from any source to either endpoint
-            for source in sources:
-                try:
-                    # Check distance to both endpoints of the edge
-                    dist_u = nx.shortest_path_length(G_undir, source, u)
-                    dist_v = nx.shortest_path_length(G_undir, source, v)
-                    min_dist = min(dist_u, dist_v)
-
-                    # Update if this is the closest edge found so far
-                    if min_dist < min_distance or (min_dist == min_distance and edge_weight < best_weight):
-                        min_distance = min_dist
-                        best_edge = (u, v)
-                        best_weight = edge_weight
-                except nx.NetworkXNoPath:
-                    continue
-
-        return min_distance, best_edge, best_weight
-
-    # Main loop to remove cycles
-    while True:
-        try:
-            cycles = list(nx.simple_cycles(G))
-            if not cycles:  # No cycles found
-                return G
-
-            print(f"Found {len(cycles)} cycles in the graph.")
-
-            # Process each cycle
-            cycle = cycles[0]  # Process one cycle at a time
-
-            # Find the edge to reverse using the new heuristic
-            min_distance, edge_to_reverse, _ = find_nearest_cycle_edge(G, sources, cycle)
-
-            if edge_to_reverse is None:
-                raise nx.NetworkXUnfeasible("Could not find suitable edge to reverse")
-
-            # Reverse the chosen edge
-            u, v = edge_to_reverse
-            edge_data = G[u][v].copy()
-            G.remove_edge(u, v)
-            G.add_edge(v, u, **edge_data)
-            print(f"Reversed edge {u}->{v} to {v}->{u} (distance from source: {min_distance})")
-
-        except nx.NetworkXUnfeasible as e:
-            print(f"Error while processing graph: {e}")
-            raise
-
-    return G
 
 
 def calculate_tondini(wn, results):
@@ -736,94 +532,6 @@ def calculate_subset_closeness(G, weight=None):
     return closeness_series
 
 
-# def calculate_hitting_time_directed(G, source, target, weight=None):
-#     """
-#     Calculates the hitting time in a weighted directed graph using a random-walk transition matrix.
-#     Edge weights represent resistance. Returns float('inf') if target is not reachable from source.
-#
-#     Parameters:
-#     -----------
-#     G : NetworkX DiGraph
-#         The directed graph with optional edge weights
-#     source : node
-#         Starting node
-#     target : node
-#         Target node
-#     weight : string, optional
-#         The edge attribute representing resistance. Default is None.
-#         If None, all edges have weight 1.0.
-#         If specified but not found, uses 1.0 as default resistance.
-#
-#     Returns:
-#     --------
-#     float
-#         Expected hitting time from source to target
-#     """
-#     if source == target:
-#         return 0.0
-#
-#     # Sort nodes for consistent indexing
-#     nodes = sorted(G.nodes())
-#     n = len(nodes)
-#
-#     # Create weighted adjacency matrix
-#     if weight is None:
-#         # If no weight specified, use binary adjacency matrix
-#         A = nx.to_numpy_array(G, nodelist=nodes, dtype=float)
-#     else:
-#         # Use specified weight attribute
-#         A = nx.to_numpy_array(G, nodelist=nodes, dtype=float, weight=weight)
-#
-#     # Construct transition probability matrix P
-#     P = np.zeros((n, n), dtype=float)
-#     for i in range(n):
-#         if weight is None:
-#             # For unweighted case, use simple probability
-#             row_sum = A[i].sum()
-#             if row_sum > 0:
-#                 P[i, :] = A[i, :] / row_sum
-#         else:
-#             # For weighted case, use conductances (1/resistance)
-#             conductances = np.where(A[i] > 0, 1.0 / A[i], 0.0)
-#             row_sum = conductances.sum()
-#             if row_sum > 0:
-#                 P[i, :] = conductances / row_sum
-#
-#     try:
-#         s = nodes.index(source)
-#         t = nodes.index(target)
-#     except ValueError:
-#         return float('inf')
-#
-#     if np.allclose(P[s, :], 0.0):
-#         return float('inf')
-#
-#     # Remove target row and column from P
-#     Q = np.delete(np.delete(P, t, axis=0), t, axis=1)
-#     if s > t:
-#         s -= 1
-#
-#     n_sub = n - 1
-#     I = np.eye(n_sub, dtype=float)
-#     b = np.ones(n_sub, dtype=float)
-#
-#     try:
-#         h = np.linalg.solve(I - Q, b)
-#     except np.linalg.LinAlgError:
-#         return float('inf')
-#
-#     if not (0 <= s < n_sub):
-#         return float('inf')
-#
-#     # Scale the hitting time by the resistances if weights are used
-#     if weight is not None:
-#         # Calculate average resistance along the path
-#         avg_resistance = np.mean([d.get(weight, 1.0) for u, v, d in G.edges(data=True)])
-#         return float(h[s] * avg_resistance)
-#     else:
-#         return float(h[s])
-
-
 def calculate_subset_random_walk_betweenness(G, sources, target=None, weight=None, reverse=False) -> pd.Series:
     """
     Calculate the subset random walk betweenness centrality for nodes in a directed graph.
@@ -956,7 +664,7 @@ def calculate_subset_random_walk_betweenness(G, sources, target=None, weight=Non
 
     return betweenness_series
 
-
+@timer_decorator
 def vitality(G, sources, weight='weight', target_contribution=None, goal=None, aggregate='sum') -> pd.Series:
     """
     Calculate the vitality of nodes in a graph based on their contribution to a goal function.
@@ -1108,7 +816,7 @@ def vitality(G, sources, weight='weight', target_contribution=None, goal=None, a
     goal_name = getattr(goal, '__name__', str(goal))
     return pd.Series(results, name=f"vitality_{goal_name}")
 
-
+@timer_decorator
 def calculate_shapley_values(G, goal, goal_args, agg_func):
     """
     Calculate Shapley values for nodes based on their contribution to the goal function.
@@ -1275,7 +983,7 @@ def calculate_shapley_values(G, goal, goal_args, agg_func):
 
     return shapley_values
 
-
+@timer_decorator
 def calculate_failure_impact_centrality(G, sources, weight=None, critical_threshold=0.9):
     """
     Calculate a centrality index based on network resilience to node failures.
@@ -1398,12 +1106,7 @@ def calculate_failure_impact_centrality(G, sources, weight=None, critical_thresh
 
     return centrality_series
 
-
-import networkx as nx
-import numpy as np
-from collections import defaultdict
-
-
+@timer_decorator
 def check_and_transform_to_directed_acyclic_graph(G):
     """
     Check if graph is directed and acyclic, transform if needed.
@@ -1433,7 +1136,7 @@ def check_and_transform_to_directed_acyclic_graph(G):
 
     return G
 
-
+@timer_decorator
 def spread_importance_pagerank(G, node_importance, reverse=False, alpha=0.85):
     """
     Spread node importance through the network using PersonalizedPageRank.
@@ -1490,7 +1193,7 @@ def spread_importance_pagerank(G, node_importance, reverse=False, alpha=0.85):
 
     return pd.Series(propagated)
 
-
+@timer_decorator
 def spread_importance(G, node_importance, reverse=False, alpha=0.85):
     """
     Spread node importance through the network by distributing values along weighted edges.
@@ -1547,8 +1250,8 @@ def spread_importance(G, node_importance, reverse=False, alpha=0.85):
 
     return pd.Series(propagated)
 
-
-def get_horton_lines(G, reverse=False, weights=None):
+@timer_decorator
+def calculate_horton_lines(G, reverse=False, weights=None):
     """
     Calculate Horton's lines based centrality.
 
@@ -1598,7 +1301,7 @@ def get_horton_lines(G, reverse=False, weights=None):
 
     return pd.Series(horton_centrality)
 
-
+@timer_decorator
 def calculate_source_reachability(G, sources):
     """
     Calculate the number of sources that can reach each node in the network.
@@ -1636,7 +1339,6 @@ def calculate_source_reachability(G, sources):
     final_result.update(pd.Series(reachability))
 
     return final_result
-
 
 
 def aggregate_centrality(structural_centrality, spread_importance,
@@ -1684,7 +1386,7 @@ def calculate_directed_metrics(G, wn):
     """
     print("\n=== Calculating Directed Graph Metrics ===")
 
-    sources = get_source_nodes(wn)
+    sources = get_source_nodes(wn)[0]
     G = convert_multidigraph_to_digraph(G)
     G = check_and_transform_to_directed_acyclic_graph(G)
     check_unreachable_nodes(G, sources)
@@ -1695,8 +1397,7 @@ def calculate_directed_metrics(G, wn):
     centralities['average_hitting_time'] = calculate_average_hitting_time_dag(G, sources)
     centralities['subset_geodetic_betweenness'] = calculate_subset_geodetic_betweenness(G, sources)
     centralities['subset_random_walk_betweenness'] = calculate_subset_random_walk_betweenness(G, sources, weight=None)
-    centralities['average_number_of_failures_before_criticality'] = calculate_failure_impact_centrality(G, sources, critical_threshold=0.7)
-    centralities['horton_line'] = get_horton_lines(G, reverse=False)
+    centralities['horton_line'] = calculate_horton_lines(G, reverse=False)
 
     # Target-specific random walk betweenness
     possible_targets = set(G.nodes()) - set(sources)
@@ -1711,9 +1412,14 @@ def calculate_directed_metrics(G, wn):
     centralities['subset_closeness_centrality'] = calculate_subset_closeness(G)
 
     # Vitality metrics
+    if len(G.nodes())<150:
+        centralities['average_number_of_failures_before_criticality'] = calculate_failure_impact_centrality(G, sources,
+                                                                                                critical_threshold=0.7)
+        centralities['vitality_random_walk_betweenness'] = vitality(G, sources,
+                                                                    goal=calculate_subset_random_walk_betweenness)
+        centralities['vitality_closeness'] = vitality(G, sources, goal=calculate_subset_closeness)
     centralities['vitality_geodetic_betweenness'] = vitality(G, sources, goal=calculate_subset_geodetic_betweenness)
-    centralities['vitality_random_walk_betweenness'] = vitality(G, sources, goal= calculate_subset_random_walk_betweenness)
-    centralities['vitality_closeness'] = vitality(G, sources, goal=calculate_subset_closeness)
+
     print("\nVitality metrics calculated:")
     for metric_name in [name for name in centralities.keys() if name.startswith('vitality_')]:
         print(f"{metric_name}:")

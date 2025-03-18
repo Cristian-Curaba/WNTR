@@ -161,7 +161,7 @@ class TestEpanetUnits(unittest.TestCase):
             self.execute_check_qual(typestring, flowunit, data, data_expected)
 
     def execute_check(self, typestring, flowunit, data, data_expected):
-        #    data_convert = wntr.utils.convert(typestring, flowunit, data)
+        #    data_convert = wntr.emergency_pre_analysis.convert(typestring, flowunit, data)
         data_convert = wntr.epanet.util.HydParam[typestring]._to_si(
             wntr.epanet.util.FlowUnits(flowunit), data
         )
@@ -174,7 +174,7 @@ class TestEpanetUnits(unittest.TestCase):
         self.assertLess(abs((data_convert - data) / data), 0.001)
 
     def execute_check_list(self, typestring, flowunit, data, data_expected):
-        #    data_convert = wntr.utils.convert(typestring, flowunit, data)
+        #    data_convert = wntr.emergency_pre_analysis.convert(typestring, flowunit, data)
         data_convert = wntr.epanet.util.HydParam[typestring]._to_si(
             wntr.epanet.util.FlowUnits(flowunit), data
         )
@@ -182,7 +182,7 @@ class TestEpanetUnits(unittest.TestCase):
         self.assertListEqual(data_convert, data_expected)
 
     def execute_check_qual(self, typestring, flowunit, data, data_expected):
-        #    data_convert = wntr.utils.convert(typestring, flowunit, data)
+        #    data_convert = wntr.emergency_pre_analysis.convert(typestring, flowunit, data)
         data_convert = wntr.epanet.util.QualParam[typestring]._to_si(
             wntr.epanet.util.FlowUnits(flowunit), data
         )
@@ -195,7 +195,7 @@ class TestEpanetUnits(unittest.TestCase):
         self.assertLess(abs((data_convert - data) / data), 0.001)
 
     def execute_check_qual_list(self, typestring, flowunit, data, data_expected):
-        #    data_convert = wntr.utils.convert(typestring, flowunit, data)
+        #    data_convert = wntr.emergency_pre_analysis.convert(typestring, flowunit, data)
         data_convert = wntr.epanet.util.QualParam[typestring]._to_si(
             wntr.epanet.util.FlowUnits(flowunit), data
         )

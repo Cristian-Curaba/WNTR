@@ -37,7 +37,7 @@ def add_get(cls=None, *, prefix=None, abbrev=False, allow_none=True):
     2. remove leading or trailing spaces
     3. convert interior spaces or dashes to underscores
     4. optionally, remove a specified prefix from a string (using ``prefix``, which 
-        should have a default assigned by the :func:`wntr.utils.enumtools.add_get` 
+        should have a default assigned by the :func:`wntr.emergency_pre_analysis.enumtools.add_get`
         function.)
 
     It will then try to get the member with the name corresponding to the converted
@@ -45,7 +45,7 @@ def add_get(cls=None, *, prefix=None, abbrev=False, allow_none=True):
     
     5. optionally, if ``abbrev`` is True, then the string will be truncated to the first
         letter, only, after trying to use the full string as passed in. The ``abbrev``
-        parameter will have a default value based on how the :func:`~wntr.utils.enumtools.add_get`
+        parameter will have a default value based on how the :func:`~wntr.emergency_pre_analysis.enumtools.add_get`
         decorator was called on this class.
     
     """
@@ -65,7 +65,7 @@ def add_get(cls=None, *, prefix=None, abbrev=False, allow_none=True):
         def get(cls, value: Union[str, int, Enum], prefix='', abbrev=False, allow_none=True):
             """Get the proper enum based on the name or value of the argument.
 
-            See :func:`~wntr.utils.enumtools.add_get` for details on how this function works.
+            See :func:`~wntr.emergency_pre_analysis.enumtools.add_get` for details on how this function works.
             
 
             Parameters

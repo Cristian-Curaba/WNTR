@@ -3,18 +3,18 @@
 main.py
 """
 
-import matplotlib.pyplot as plt
-import pandas as pd
 import plotly
-import math
 from typing import List, Dict, Set, Union, Any
-from matplotlib.lines import Line2D
 
-from utils.hydraulic import *
-from utils.custom_centrality_indexes import *
+from emergency_pre_analysis.hydraulic import *
+from emergency_pre_analysis.custom_centrality_indexes import *
+from emergency_pre_analysis.utils import *
+
 from wntr.morph import skeletonize
 from wntr.network import WaterNetworkModel
 from wntr.sim import SimulationResults
+import wntr
+import os
 
 
 def load_network_from_inp(inp_path) -> WaterNetworkModel:
@@ -407,181 +407,163 @@ def complete_graph_visualization(
     flow_time: int = -1
 ):
     """
-    Creates:
-      1) A single interactive plot showing node pressures and link flows.
-      2) One interactive plot for each centrality measure.
+    Creates network visualization with special symbols for different node types,
+    including sources, and improved node sizing based on demands.
 
-    Parameters
-    ----------
-    wn : WaterNetworkModel
-        A WaterNetworkModel object
-    centralities : Dict[str, pd.Series]
-        Dictionary where the key is the name of the centrality measure
-        and the value is a per-node series of the centrality values.
-    simulation_results : object
-        Contains simulation results, expected to have 'get_node' for pressures
-        and 'get_link' for flow or similar access to final results.
-    pressure_time : int
-        Index of the time step (in the results) from which to extract pressures.
-    flow_time : int
-        Index of the time step (in the results) from which to extract flows.
-        Defaults to -1 (the last time step).
+    Parameters remain the same as the original function.
     """
-    # Create directory for images if it doesn't exist
+    # Create directory for images
     network_name = os.path.splitext(os.path.basename(wn.name))[0]
     image_dir = os.path.join('images', network_name)
     os.makedirs(image_dir, exist_ok=True)
 
-    # -------------------------------------------------------------------------
-    # 1) Build dictionaries for node pressures and link flows
-    # -------------------------------------------------------------------------
+    # Get source nodes that are not reservoirs or tanks
+    source_nodes = set(get_source_nodes(wn)[0])
+    reservoir_tank_nodes = set(node_name for node_name, node in wn.nodes()
+                             if node.node_type in ['Reservoir', 'Tank'])
+    pure_source_nodes = source_nodes - reservoir_tank_nodes
+
+    # Get pressures and flows with better error handling
+    pressure_dict = {}
     try:
-        node_pressures = simulation_results.node['pressure'].iloc[pressure_time, :]
-    except AttributeError:
-        # Try alternative access methods
-        try:
-            node_pressures = simulation_results.node['pressure'][pressure_time]
-        except:
-            raise AttributeError("Check how your simulation_results stores node pressure data.")
-    except KeyError:
-        raise KeyError("Cannot locate 'pressure' in simulation_results.node.")
-
-    try:
-        link_flows = simulation_results.link['flowrate'].iloc[flow_time, :]
-    except AttributeError:
-        # Try alternative access methods
-        try:
-            link_flows = simulation_results.link['flowrate'][flow_time]
-        except:
-            raise AttributeError("Check how your simulation_results stores link flow data.")
-    except KeyError:
-        raise KeyError("Cannot locate 'flowrate' in simulation_results.link.")
-
-    # -------------------------------------------------------------------------
-    # 2) Create node size dictionary based on demands
-    # -------------------------------------------------------------------------
-    # Extract base demands from the water network model
-    node_size_dict = {}
-
-    # Try to get demands from the network model
-    try:
-        for node_name, node in wn.nodes():
-            if node.node_type == 'Junction':
-                # Get base demand (could be a list for multiple demand patterns)
-                base_demand = node.base_demand
-
-                # Handle different demand formats
-                if isinstance(base_demand, list):
-                    # Sum all demands if there are multiple
-                    total_demand = sum(demand_tuple[0] for demand_tuple in base_demand)
-                else:
-                    total_demand = base_demand
-
-                # Store absolute value of demand (both positive and negative demands affect size)
-                node_size_dict[node_name] = abs(total_demand)
-            else:
-                # For non-junction nodes (tanks, reservoirs), use default size
-                node_size_dict[node_name] = 5
-    except:
-        # If there's any error accessing demands, use a default size
-        print("Warning: Could not access node demands. Using default node sizes.")
-        node_size_dict = {node: 8 for node in wn.node_name_list}
-
-    # Scale node sizes using square root scale for better visualization
-    if node_size_dict:
-        # Get non-zero demands
-        non_zero_demands = [size for size in node_size_dict.values() if size > 0]
-
-        if non_zero_demands:
-            import numpy as np
-
-            # Get min and max of non-zero demands
-            min_demand = min(non_zero_demands)
-            max_demand = max(non_zero_demands)
-
-            # Apply square root scaling if there's variation in the demands
-            if max_demand > min_demand:
-                # Take square root of demands and scale between 5 and 20
-                sqrt_min = np.sqrt(min_demand)
-                sqrt_max = np.sqrt(max_demand)
-
-                for node, size in node_size_dict.items():
-                    if size > 0:
-                        sqrt_size = np.sqrt(size)
-                        # Scale to range [5, 20]
-                        scaled_size = 10+ 10 * (sqrt_size - sqrt_min) / (sqrt_max - sqrt_min)
-                        node_size_dict[node] = max(5, scaled_size)  # Ensure minimum size is 5
-                    else:
-                        # Use minimum size for zero-demand nodes
-                        node_size_dict[node] = 5
-            else:
-                # If all demands are the same, use a fixed size
-                node_size_dict = {node: 10 for node in node_size_dict}
+        if hasattr(simulation_results.node['pressure'], 'iloc'):
+            pressures = simulation_results.node['pressure'].iloc[pressure_time, :]
         else:
-            # If all demands are zero, set all node sizes to the minimum size
-            node_size_dict = {node: 5 for node in node_size_dict}
-        print(node_size_dict)
+            pressures = simulation_results.node['pressure'][pressure_time]
 
-    # -------------------------------------------------------------------------
-    # 3) Plot with node pressures and link flows
-    # -------------------------------------------------------------------------
-    # Convert flows into a dictionary {link_name: flow_value}
-    flow_dict = link_flows.to_dict()
+        if isinstance(pressures, pd.Series):
+            pressure_dict = pressures.to_dict()
+        else:
+            pressure_dict = {node: pressures[node] for node in wn.node_name_list}
+    except Exception as e:
+        print(f"Warning: Could not process pressure data: {str(e)}")
+        pressure_dict = {node: 0 for node in wn.node_name_list}
 
-    # Basic scaling for link width
-    min_flow = abs(min(flow_dict.values(), key=abs))  # Minimum absolute flow
-    max_flow = abs(max(flow_dict.values(), key=abs))  # Maximum absolute flow
+    # Get flows with better error handling
+    flow_dict = {}
+    try:
+        if hasattr(simulation_results.link['flowrate'], 'iloc'):
+            flows = simulation_results.link['flowrate'].iloc[flow_time, :]
+        else:
+            flows = simulation_results.link['flowrate'][flow_time]
 
-    # Avoid divide-by-zero if all flows are zero
-    if (max_flow - min_flow) == 0:
-        scaled_flows = {link: 1 for link in flow_dict}
+        if isinstance(flows, pd.Series):
+            flow_dict = flows.to_dict()
+        else:
+            flow_dict = {link: flows[link] for link in wn.link_name_list}
+    except Exception as e:
+        print(f"Warning: Could not process flow data: {str(e)}")
+        flow_dict = {link: 0 for link in wn.link_name_list}
+
+    # Create node type and size dictionaries
+    node_size_dict = {}
+    node_symbol_dict = {}
+    node_color_dict = {}
+
+    # Define symbols and colors for special nodes
+    SPECIAL_NODE_TYPES = {
+        'Reservoir': {'symbol': 'square', 'color': 'blue', 'size': 15},
+        'Tank': {'symbol': 'diamond', 'color': 'green', 'size': 15},
+        'Pump': {'symbol': 'triangle-up', 'color': 'red', 'size': 15},
+        'Source': {'symbol': 'star', 'color': 'orange', 'size': 15}
+    }
+
+    # Process nodes and their demands
+    junction_demands = []
+    for node_name, node in wn.nodes():
+        # Set symbol and color based on node type
+        node_type = node.node_type
+        is_pure_source = node_name in pure_source_nodes
+
+        if node_type in SPECIAL_NODE_TYPES:
+            node_symbol_dict[node_name] = SPECIAL_NODE_TYPES[node_type]['symbol']
+            node_color_dict[node_name] = SPECIAL_NODE_TYPES[node_type]['color']
+            node_size_dict[node_name] = SPECIAL_NODE_TYPES[node_type]['size']
+        elif is_pure_source:
+            node_symbol_dict[node_name] = SPECIAL_NODE_TYPES['Source']['symbol']
+            node_color_dict[node_name] = SPECIAL_NODE_TYPES['Source']['color']
+            node_size_dict[node_name] = SPECIAL_NODE_TYPES['Source']['size']
+        else:  # Junction
+            node_symbol_dict[node_name] = 'circle'
+            node_color_dict[node_name] = 'gray'
+
+            # Get demand for junction sizing
+            try:
+                if node.base_demand is None:
+                    base_demand = 0
+                elif isinstance(node.base_demand, list):
+                    base_demand = sum(demand_tuple[0] for demand_tuple in node.base_demand)
+                else:
+                    base_demand = node.base_demand
+
+                junction_demands.append((node_name, abs(base_demand)))
+            except:
+                junction_demands.append((node_name, 0))
+
+    # Scale junction sizes based on demands
+    if junction_demands:
+        demands = [d for _, d in junction_demands]
+        max_demand = max(demands) if demands else 0
+        min_demand = min(demands) if demands else 0
+
+        for node_name, demand in junction_demands:
+            if max_demand == min_demand:
+                node_size_dict[node_name] = 5
+            elif demand == 0:
+                node_size_dict[node_name] = 5
+            else:
+                scaled_size = 5 + 10 * (demand - min_demand) / (max_demand - min_demand)
+                node_size_dict[node_name] = scaled_size
+
+    # Process flows for link widths
+    if flow_dict:
+        min_flow = abs(min(flow_dict.values(), key=abs))
+        max_flow = abs(max(flow_dict.values(), key=abs))
+
+        if (max_flow - min_flow) == 0:
+            scaled_flows = {link: 1 for link in flow_dict}
+        else:
+            scaled_flows = {
+                link: 1 + 7 * (abs(val) - min_flow) / (max_flow - min_flow)
+                for link, val in flow_dict.items()
+            }
     else:
-        # Scale flows to width between 1 and 8
-        scaled_flows = {
-            link: 1 + 7 * (abs(val) - min_flow) / (max_flow - min_flow)
-            for link, val in flow_dict.items()
-        }
+        scaled_flows = {link: 1 for link in wn.link_name_list}
 
-    # Convert node pressures into a dictionary {node_name: pressure_value}
-    pressure_dict = node_pressures.to_dict()
-
-    # Add flow information to node popup
+    # Create node popup info
     node_popup_info = pd.DataFrame(index=wn.node_name_list)
+    node_popup_info['Node Type'] = ['Source' if node in pure_source_nodes
+                                   else wn.get_node(node).node_type
+                                   for node in wn.node_name_list]
 
-    # We'll produce an HTML with node pressures, demand-based node sizes, and flow-based link widths
+    # Plot network with all attributes
     plot_interactive_network_with_links(
         wn,
         node_attribute=pressure_dict,
         node_attribute_name="Pressure",
         title="Network: Pressures and Flow",
-        node_size=8,  # Default size
-        node_size_dict=node_size_dict,  # Variable sizes based on demands
+        node_size_dict=node_size_dict,
+        node_symbol_dict=node_symbol_dict,
         link_width=scaled_flows,
         add_to_node_popup=node_popup_info,
         filename=os.path.join(image_dir, "flow_and_pressure.html"),
         auto_open=False
     )
 
-    # -------------------------------------------------------------------------
-    # 4) Plot for each centrality measure
-    # -------------------------------------------------------------------------
+    # Plot centrality measures
     for centrality_name, centrality_series in centralities.items():
-        # Convert centrality Series to dict
-        # Then modify the assignment
         if isinstance(centrality_series, dict):
-            print(f"Warning: centrality_series is already a dictionary: {type(centrality_name)}")
             centrality_dict = centrality_series
         else:
             centrality_dict = centrality_series.to_dict()
 
-        # Plot and save to HTML
         plot_interactive_network_with_links(
             wn,
             node_attribute=centrality_dict,
             node_attribute_name=centrality_name,
             title=f"Centrality: {centrality_name}",
-            node_size=8,  # Default size
-            node_size_dict=node_size_dict,  # Variable sizes based on demands
+            node_size_dict=node_size_dict,
+            node_symbol_dict=node_symbol_dict,
             filename=os.path.join(image_dir, f"centrality_{centrality_name}.html"),
             auto_open=False
         )
@@ -590,57 +572,58 @@ def complete_graph_visualization(
 
 
 def plot_interactive_network_with_links(wn, node_attribute=None, node_attribute_name='Value',
-                                        title=None, node_size=8, node_size_dict=None,
-                                        node_range=[None, None], node_cmap='Jet',
-                                        node_labels=True, link_width=1,
-                                        add_colorbar=True, reverse_colormap=False,
-                                        figsize=[700, 450], round_ndigits=2,
-                                        add_to_node_popup=None, filename='plotly_network.html',
-                                        auto_open=True):
+                                      title=None, node_size=8, node_size_dict=None,
+                                      node_symbol_dict=None,
+                                      node_range=[None, None], node_cmap='Jet',
+                                      node_labels=True, link_width=1,
+                                      add_colorbar=True, reverse_colormap=False,
+                                      figsize=[700, 450], round_ndigits=2,
+                                      add_to_node_popup=None, filename='plotly_network.html',
+                                      auto_open=True):
     """
-    Interactive network plot with variable line widths, edge orientation, and variable node sizes.
+        Interactive network plot with variable line widths, edge orientation, and variable node sizes.
 
-    Parameters:
-    -----------
-    wn : wntr.network.WaterNetworkModel
-        Water network model
-    node_attribute : dict, optional
-        Dictionary of node attributes
-    node_attribute_name : str, optional
-        Name of node attribute
-    title : str, optional
-        Plot title
-    node_size : int, optional
-        Default node size
-    node_size_dict : dict, optional
-        Dictionary of node sizes {node_name: size}
-    node_range : list, optional
-        Node attribute range
-    node_cmap : str, optional
-        Node colormap
-    node_labels : bool, optional
-        If True, include node labels in hover text
-    link_width : int or dict, optional
-        Link width or dictionary of link widths {link_name: width}
-    add_colorbar : bool, optional
-        If True, add colorbar
-    reverse_colormap : bool, optional
-        If True, reverse colormap
-    figsize : list, optional
-        Figure size
-    round_ndigits : int, optional
-        Number of digits to round node attribute values
-    add_to_node_popup : pandas.DataFrame, optional
-        Additional node information to include in hover text
-    filename : str, optional
-        Filename to save HTML file
-    auto_open : bool, optional
-        If True, open HTML file after creating
+        Parameters:
+        -----------
+        wn : wntr.network.WaterNetworkModel
+            Water network model
+        node_attribute : dict, optional
+            Dictionary of node attributes
+        node_attribute_name : str, optional
+            Name of node attribute
+        title : str, optional
+            Plot title
+        node_size : int, optional
+            Default node size
+        node_size_dict : dict, optional
+            Dictionary of node sizes {node_name: size}
+        node_range : list, optional
+            Node attribute range
+        node_cmap : str, optional
+            Node colormap
+        node_labels : bool, optional
+            If True, include node labels in hover text
+        link_width : int or dict, optional
+            Link width or dictionary of link widths {link_name: width}
+        add_colorbar : bool, optional
+            If True, add colorbar
+        reverse_colormap : bool, optional
+            If True, reverse colormap
+        figsize : list, optional
+            Figure size
+        round_ndigits : int, optional
+            Number of digits to round node attribute values
+        add_to_node_popup : pandas.DataFrame, optional
+            Additional node information to include in hover text
+        filename : str, optional
+            Filename to save HTML file
+        auto_open : bool, optional
+            If True, open HTML file after creating
 
-    Returns:
-    --------
-    plotly.graph_objs.Figure
-    """
+        Returns:
+        --------
+        plotly.graph_objs.Figure
+        """
     if plotly is None:
         raise ImportError('plotly is required')
 
@@ -655,151 +638,144 @@ def plot_interactive_network_with_links(wn, node_attribute=None, node_attribute_
     else:
         add_colorbar = False
 
-    # Create a mapping from node pairs to link names
+    # Create edge traces
     node_pair_to_link = {}
     for link_name, link in wn.links():
         node_pair_to_link[(link.start_node_name, link.end_node_name)] = link_name
 
-    # Create edge traces - one for each edge
     edge_traces = []
-
-    # Process edges
     for edge in G.edges():
         x0, y0 = G.nodes[edge[0]]['pos']
         x1, y1 = G.nodes[edge[1]]['pos']
-
-        # Get link name
         link_name = node_pair_to_link.get(edge)
 
-        # Determine width
-        if isinstance(link_width, dict) and link_name in link_width:
-            w = link_width[link_name]
+        # Handle link width based on type
+        if isinstance(link_width, dict):
+            w = link_width.get(link_name, 1)
+            flow_value = link_width.get(link_name, 0)
         else:
-            w = 1 if isinstance(link_width, dict) else link_width
+            w = link_width
+            flow_value = 0
 
         # Create hover text
         if link_name:
-            flow_val = link_width.get(link_name, 0) if isinstance(link_width, dict) else 0
-            info = f"Pipe: {link_name}<br>Flow: {flow_val:.2f}"
+            info = f"Pipe: {link_name}<br>Flow: {flow_value:.2f}"
         else:
             info = f"Edge: {edge[0]} → {edge[1]}"
 
-        # Create edge trace with arrow
-        edge_trace = plotly.graph_objs.Scatter(
-            x=[x0, x1],
-            y=[y0, y1],
-            text=info,
+        edge_traces.append(
+            plotly.graph_objs.Scatter(
+                x=[x0, x1],
+                y=[y0, y1],
+                text=info,
+                hoverinfo='text',
+                mode='lines+markers',
+                line=dict(color='#888', width=w),
+                marker=dict(
+                    symbol='arrow',
+                    size=8,
+                    color='#888',
+                    angleref='previous'
+                ),
+                showlegend=False
+            )
+        )
+
+    # Create separate node traces for different symbols
+    node_traces = {}
+
+    # Process nodes
+    for node in G.nodes():
+        x, y = G.nodes[node]['pos']
+
+        # Determine node symbol
+        symbol = (node_symbol_dict.get(node, 'circle')
+                  if node_symbol_dict is not None else 'circle')
+
+        # Create new trace for symbol if it doesn't exist
+        if symbol not in node_traces:
+            node_traces[symbol] = {
+                'x': [], 'y': [],
+                'sizes': [],
+                'colors': [],
+                'hover_texts': [],
+                'nodes': []  # Store node names for attribute mapping
+            }
+
+        # Add node data to appropriate trace
+        trace_data = node_traces[symbol]
+        trace_data['x'].append(x)
+        trace_data['y'].append(y)
+        trace_data['nodes'].append(node)
+
+        # Determine node size
+        size = (node_size_dict.get(node, node_size)
+                if node_size_dict is not None else node_size)
+        trace_data['sizes'].append(size)
+
+        # Determine node color based on attribute
+        if node_attribute is not None and node in node_attribute:
+            trace_data['colors'].append(node_attribute[node])
+        else:
+            trace_data['colors'].append(0)
+
+        # Create hover text
+        hover_text = []
+        if node_labels:
+            hover_text.append(f"Node: {node}")
+        if node_size_dict and node in node_size_dict:
+            hover_text.append(f"Size: {size:.2f}")
+        if node_attribute is not None and node in node_attribute:
+            val = node_attribute[node]
+            val_str = (f"{val:.{round_ndigits}f}"
+                       if isinstance(val, (int, float)) else str(val))
+            hover_text.append(f"{node_attribute_name}: {val_str}")
+        if add_to_node_popup is not None and node in add_to_node_popup.index:
+            for col in add_to_node_popup.columns:
+                val = add_to_node_popup.loc[node, col]
+                if not pd.isna(val):
+                    hover_text.append(f"{col}: {val}")
+
+        trace_data['hover_texts'].append('<br>'.join(hover_text))
+
+    # Create Scatter traces for each symbol group
+    node_scatter_traces = []
+    for symbol, trace_data in node_traces.items():
+        scatter = plotly.graph_objs.Scatter(
+            x=trace_data['x'],
+            y=trace_data['y'],
+            mode='markers',
             hoverinfo='text',
-            mode='lines+markers',
-            line=dict(color='#888', width=w),
+            hovertext=trace_data['hover_texts'],
             marker=dict(
-                symbol='arrow',
-                size=8,
-                color='#888',
-                angleref='previous'
+                symbol=symbol,
+                size=trace_data['sizes'],
+                color=trace_data['colors'],  # Always use the colors list
+                colorscale=node_cmap if node_attribute is not None else None,
+                reversescale=reverse_colormap,
+                showscale=add_colorbar and symbol == 'circle',  # Only show colorbar for main trace
+                colorbar=dict(
+                    thickness=15,
+                    title=node_attribute_name,
+                    xanchor='left',
+                    titleside='right'
+                ) if add_colorbar and symbol == 'circle' else None,
+                line=dict(width=2)
             ),
             showlegend=False
         )
 
-        edge_traces.append(edge_trace)
+        # Set color range if specified
+        if node_attribute is not None:
+            if node_range[0] is not None:
+                scatter.marker.cmin = node_range[0]
+            if node_range[1] is not None:
+                scatter.marker.cmax = node_range[1]
 
-    # Create node trace
-    node_trace = plotly.graph_objs.Scatter(
-        x=[],
-        y=[],
-        text=[],
-        hovertext=[],
-        mode='markers',
-        hoverinfo='text',
-        marker=dict(
-            showscale=add_colorbar,
-            colorscale=node_cmap,
-            reversescale=reverse_colormap,
-            color=[],
-            size=[],  # Will be filled with node sizes
-            colorbar=dict(
-                thickness=15,
-                title=node_attribute_name,
-                xanchor='left',
-                titleside='right'
-            ),
-            line=dict(width=2)
-        )
-    )
-
-    # Add nodes with variable sizes
-    node_x = []
-    node_y = []
-    node_sizes = []
-
-    for node in G.nodes():
-        x, y = G.nodes[node]['pos']
-        node_x.append(x)
-        node_y.append(y)
-
-        # Determine node size
-        if node_size_dict and node in node_size_dict:
-            node_sizes.append(node_size_dict[node])
-        else:
-            node_sizes.append(node_size)
-
-    node_trace['x'] = node_x
-    node_trace['y'] = node_y
-    node_trace['marker']['size'] = node_sizes
-
-    # Color nodes based on attribute
-    if node_attribute is not None:
-        node_colors = []
-        for node in G.nodes():
-            if node in node_attribute:
-                node_colors.append(node_attribute[node])
-            else:
-                node_colors.append(0)
-
-        node_trace['marker']['color'] = node_colors
-
-        if node_range[0] is not None:
-            node_trace['marker']['cmin'] = node_range[0]
-        if node_range[1] is not None:
-            node_trace['marker']['cmax'] = node_range[1]
-
-    # Add node labels and additional popup info
-    node_hover_texts = []
-    for node in G.nodes():
-        node_info = []
-
-        # Add node name
-        if node_labels:
-            node_info.append(f"Node: {node}")
-
-        # Add node size if using variable sizes
-        if node_size_dict and node in node_size_dict:
-            node_info.append(f"Size: {node_size_dict[node]:.2f}")
-
-        # Add node attribute if available
-        if node_attribute is not None and node in node_attribute:
-            val = node_attribute[node]
-            if isinstance(val, (int, float)):
-                val_str = f"{val:.{round_ndigits}f}"
-            else:
-                val_str = str(val)
-            node_info.append(f"{node_attribute_name}: {val_str}")
-
-        # Add additional popup info if provided
-        if add_to_node_popup is not None and node in add_to_node_popup.index:
-            for col in add_to_node_popup.columns:
-                val = add_to_node_popup.loc[node, col]
-                if not pd.isna(val):  # Skip NaN values
-                    node_info.append(f"{col}: {val}")
-
-        # Join all info with line breaks
-        node_hover_texts.append('<br>'.join(node_info))
-
-    node_trace['hovertext'] = node_hover_texts
-
+        node_scatter_traces.append(scatter)
     # Create figure
     fig = plotly.graph_objs.Figure(
-        data=edge_traces + [node_trace],
+        data=edge_traces + node_scatter_traces,
         layout=plotly.graph_objs.Layout(
             title=title,
             titlefont=dict(size=16),
@@ -817,6 +793,7 @@ def plot_interactive_network_with_links(wn, node_attribute=None, node_attribute_
     plotly.offline.plot(fig, filename=filename, auto_open=auto_open)
 
     return fig
+
 
 def _format_node_attribute(node_attribute, wn):
     """
@@ -842,7 +819,7 @@ def _format_node_attribute(node_attribute, wn):
 
 def main():
     # Path to an example INP file. Adjust as needed.
-    inp_file = os.path.join('examples', 'networks', 'Net3.inp')
+    inp_file = os.path.join('examples', 'networks', 'Zampis.inp')
 
     # 1. Load Network
     wn = load_network_from_inp(inp_file)
@@ -855,11 +832,11 @@ def main():
     analyze_hydraulic_results(epanet_results, node_name='1')  # Replace with valid node
 
     # 4. WNTR Simulation
-    wntr_results = run_wntr_simulation(wn)
-    analyze_hydraulic_results(wntr_results, node_name='1')
+    # wntr_results = run_wntr_simulation(wn)
+    # analyze_hydraulic_results(wntr_results, node_name='1')
 
     # 5. Resilience Metrics
-    calculate_tondini(wn, wntr_results)
+    # calculate_tondini(wn, wntr_results)
 
     # 6. (Optional) Water Quality Simulation
     sim = wntr.sim.EpanetSimulator(wn)
@@ -882,8 +859,20 @@ def main():
     demonstrate_scenario_based_analysis(wn)
     demonstrate_demand_change(wn)
 
+    # 9. Improve edge orientation
+    # Get initial atypical nodes
+    _, initial_atypical = get_source_nodes(wn)
+    try:
+        num_reoriented, remaining_atypical = reorient_edges_by_pressure(wn, verbose=True)
+        print(f"\nSummary:")
+        print(f"- Reoriented {num_reoriented} edges")
+        print(f"- Reduced atypical nodes from {len(initial_atypical)} to {len(remaining_atypical)}")
+    except Exception as e:
+        print(f"Error during edge reorientation: {str(e)}")
 
-    # 9. Graph Visualization
+
+
+    # 10. Graph Visualization
     centralities = calculate_network_metrics(wn)
     complete_graph_visualization(wn, centralities, simulation_results=results)
 
