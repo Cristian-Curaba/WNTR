@@ -34,3 +34,5 @@ wntr~=1.3.0rc2
 shapely~=2.0.6
 six~=1.17.0
 PyYAML~=6.0.2
+seaborn~=0.13.2
+tqdm~=4.67.1

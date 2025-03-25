@@ -3,18 +3,17 @@
 main.py
 """
 
+import random
+from typing import Dict, Any
+
 import plotly
-from typing import List, Dict, Set, Union, Any
 
-from emergency_pre_analysis.hydraulic import *
 from emergency_pre_analysis.custom_centrality_indexes import *
+from emergency_pre_analysis.hydraulic import *
 from emergency_pre_analysis.utils import *
-
 from wntr.morph import skeletonize
 from wntr.network import WaterNetworkModel
-from wntr.sim import SimulationResults
-import wntr
-import os
+from emergency_pre_analysis.index_analysis import *
 
 
 def load_network_from_inp(inp_path) -> WaterNetworkModel:
@@ -25,6 +24,7 @@ def load_network_from_inp(inp_path) -> WaterNetworkModel:
     wn = wntr.network.WaterNetworkModel(inp_path)
     print("...done.\n")
     return wn
+
 
 def print_basic_network_info(wn) -> None:
     """
@@ -38,6 +38,7 @@ def print_basic_network_info(wn) -> None:
     print(f"Number of valves: {len(wn.valve_name_list)}")
     print(f"Number of pumps: {len(wn.pump_name_list)}")
     print("")
+
 
 def analyze_centrality_distribution(centrality: Dict) -> Dict:
     """
@@ -53,15 +54,16 @@ def analyze_centrality_distribution(centrality: Dict) -> Dict:
     Dict
         Statistical summary of centrality values
     """
-    values = list(centrality.values())
+    values = list(centrality.values( ))
     return {
         'mean': np.mean(values),
         'median': np.median(values),
         'std': np.std(values),
         'min': min(values),
         'max': max(values),
-        'top_nodes': sorted(centrality.items(), key=lambda x: x[1], reverse=True)[:5]
+        'top_nodes': sorted(centrality.items( ), key=lambda x: x[1], reverse=True)[:5]
     }
+
 
 def calculate_network_metrics(wn):
     """
@@ -71,10 +73,10 @@ def calculate_network_metrics(wn):
     print("=== Calculating Network Centralities ===")
 
     # Get the *directed* NetworkX graph from the WNTR network
-    G = wn.to_graph()
+    G = wn.to_graph( )
 
     # Also create an undirected copy for metrics that require undirected graphs
-    G_undirected = G.to_undirected()
+    G_undirected = G.to_undirected( )
 
     # Initialize dictionary to store centrality results
     centralities = {}
@@ -91,371 +93,28 @@ def calculate_network_metrics(wn):
     print("\nMetrics calculation complete.\n")
     return centralities
 
-# def demonstrate_graph_visualization_old(wn, centralities):
-#     """
-#     Creates visualizations of the network:
-#     - Pressure visualization (pressure as node color, flowrate as link width, demand as node size)
-#     - Individual centrality visualizations (centrality as node color, demand as node size)
-#     """
-#     print("=== Advanced Graph Visualization ===")
-#
-#     # Create directory for images if it doesn't exist
-#     network_name = os.path.splitext(os.path.basename(wn.name))[0]
-#     image_dir = os.path.join('images', network_name)
-#     os.makedirs(image_dir, exist_ok=True)
-#
-#     # Run simulation for pressure and flowrate
-#     sim = wntr.sim.EpanetSimulator(wn)
-#     results = sim.run_sim()
-#
-#     # Extract node pressure, link flowrate, and node demand at time = 0
-#     node_pressure = results.node['pressure'].loc[0]
-#     link_flowrate = results.link['flowrate'].loc[0]
-#     node_demand = results.node['demand'].loc[0]
-#
-#     # Get the graph and positions
-#     G = wn.to_graph()
-#     pos = nx.get_node_attributes(G, 'pos')
-#
-#     # First, create a mapping from node pairs to link names
-#     link_mapping = {}
-#     for link_name, link_obj in wn.links():
-#         start_node = link_obj.start_node_name
-#         end_node = link_obj.end_node_name
-#         link_mapping[(start_node, end_node)] = link_name
-#         link_mapping[(end_node, start_node)] = link_name  # Add reverse mapping too
-#
-#     # Calculate link widths
-#     max_flow = max(abs(flow) for flow in link_flowrate)
-#     min_width = 1
-#     max_width = 5
-#
-#     # Create edge width dictionary
-#     edge_widths = []
-#     edges = list(G.edges())  # Get list of edges from graph
-#
-#     # Debug information
-#     print(f"Number of edges in graph: {len(edges)}")
-#     print(f"Number of links in mapping: {len(link_mapping)}")
-#     print(f"Number of nodes in graph: {len(G.nodes())}")
-#
-#     for (u, v) in edges:
-#         if (u, v) in link_mapping:
-#             link_name = link_mapping[(u, v)]
-#             if link_name in link_flowrate:
-#                 flow = abs(link_flowrate[link_name])
-#                 width = min_width + (max_width - min_width) * (flow / max_flow)
-#                 edge_widths.append(width)
-#             else:
-#                 print(f"  No flow data for link {link_name}")
-#                 edge_widths.append(min_width)
-#         else:
-#             print(f"Edge ({u}, {v}) not found in link mapping")
-#             edge_widths.append(min_width)
-#
-#     # Define node categories styling
-#     node_categories = {
-#         'reservoirs': {'marker': '^', 'color': 'blue', 'size_factor': 3.0},
-#         'tanks': {'marker': 's', 'color': 'purple', 'size_factor': 2.5},
-#         'valves': {'marker': '*', 'color': 'red', 'size_factor': 2.5},
-#         'junctions': {'marker': 'o', 'color': 'black', 'size_factor': 1.0}
-#     }
-#
-#     node_types = {
-#         'reservoirs': wn.reservoir_name_list,
-#         'tanks': wn.tank_name_list,
-#         'valves': wn.valve_name_list,
-#         'junctions': wn.junction_name_list
-#     }
-#
-#     # Calculate node sizes based on demand
-#     # Filter out NaN values and get valid demands
-#     valid_demands = [demand for node, demand in node_demand.items() if not np.isnan(demand)]
-#
-#     # Define base node sizes for demand categories
-#     base_size = 40
-#     min_size = 20
-#     max_size = 120
-#
-#     # Create node size mapping based on demand
-#     node_sizes = {}
-#
-#     if valid_demands:
-#         # Find maximum demand for scaling
-#         max_demand = max(valid_demands)
-#
-#         if max_demand > 0:
-#             # Calculate size for each node based on demand
-#             for node in G.nodes():
-#                 if node not in node_demand or np.isnan(node_demand[node]) or node_demand[node] <= 0:
-#                     # No demand nodes get minimum size
-#                     node_sizes[node] = min_size
-#                 else:
-#                     # Scale size based on demand
-#                     size_range = max_size - min_size
-#                     demand_ratio = node_demand[node] / max_demand
-#                     node_sizes[node] = min_size + size_range * demand_ratio
-#         else:
-#             # If all demands are zero or negative
-#             for node in G.nodes():
-#                 node_sizes[node] = min_size
-#     else:
-#         # If no valid demand data
-#         for node in G.nodes():
-#             node_sizes[node] = base_size
-#
-#     # 1. Create pressure + flowrate visualization with demand as node size
-#     fig, ax = plt.subplots(figsize=(12, 8))
-#
-#     # Create a list of node colors and sizes
-#     node_colors = []
-#     node_size_list = []
-#
-#     for node in G.nodes():
-#         # Get pressure for color
-#         if node in node_pressure:
-#             node_colors.append(node_pressure[node])
-#         else:
-#             print(f"Warning: Node {node} not found in pressure data")
-#             node_colors.append(0)  # Default value
-#
-#         # Get size based on demand
-#         if node in node_sizes:
-#             node_size_list.append(node_sizes[node])
-#         else:
-#             node_size_list.append(min_size)  # Default size
-#
-#     # Plot nodes with pressure as color and demand as size
-#     node_collection = nx.draw_networkx_nodes(
-#         G, pos,
-#         node_color=node_colors,
-#         node_size=node_size_list,
-#         cmap=plt.cm.coolwarm,
-#         vmin=node_pressure.min(),
-#         vmax=node_pressure.max(),
-#         ax=ax
-#     )
-#
-#     # Plot edges with varying widths
-#     nx.draw_networkx_edges(
-#         G, pos,
-#         width=edge_widths,
-#         edge_color='gray',
-#         alpha=0.7,
-#         ax=ax
-#     )
-#
-#     # Add colorbar for pressure
-#     plt.colorbar(node_collection, label='Pressure (m)')
-#
-#     # Add legend for flowrate scale
-#     flow_legend_elements = [
-#         Line2D([0], [0], color='gray', linewidth=min_width, label='Min Flow'),
-#         Line2D([0], [0], color='gray', linewidth=(min_width + max_width) / 2, label='Med Flow'),
-#         Line2D([0], [0], color='gray', linewidth=max_width, label='Max Flow')
-#     ]
-#
-#     # Add legend for demand scale
-#     demand_legend_elements = [
-#         Line2D([0], [0], marker='o', color='w', markerfacecolor='gray',
-#                markersize=np.sqrt(min_size) / 2, label='No Demand'),
-#         Line2D([0], [0], marker='o', color='w', markerfacecolor='gray',
-#                markersize=np.sqrt((min_size + max_size) / 2) / 2, label='Medium Demand'),
-#         Line2D([0], [0], marker='o', color='w', markerfacecolor='gray',
-#                markersize=np.sqrt(max_size) / 2, label='High Demand')
-#     ]
-#
-#     # Add node category markers for special nodes
-#     for category, node_list in node_types.items():
-#         if category in ['reservoirs', 'tanks', 'valves']:  # Only mark special nodes
-#             if not node_list:
-#                 continue
-#             valid_nodes = [node for node in node_list if node in pos]
-#             if not valid_nodes:
-#                 continue
-#             x_coords, y_coords = zip(*[pos[node] for node in valid_nodes])
-#             ax.scatter(x_coords, y_coords,
-#                        marker=node_categories[category]['marker'],
-#                        c=node_categories[category]['color'],
-#                        s=[node_sizes[node] * node_categories[category]['size_factor'] for node in valid_nodes],
-#                        label=category.capitalize(),
-#                        edgecolor='k')
-#
-#     # Add legends
-#     flow_legend = ax.legend(handles=flow_legend_elements, title="Flow Rate",
-#                             loc="upper left", fontsize=10)
-#     ax.add_artist(flow_legend)
-#
-#     demand_legend = ax.legend(handles=demand_legend_elements, title="Node Demand",
-#                               loc="lower left", fontsize=10)
-#     ax.add_artist(demand_legend)
-#
-#     node_legend = ax.legend(title="Special Nodes", loc="upper right", fontsize=10)
-#     ax.add_artist(node_legend)
-#
-#     plt.title("Pressure and Flowrate Distribution (Node Size = Demand)")
-#     filename = os.path.join(image_dir, "pressure_flowrate_demand.png")
-#     plt.savefig(filename, dpi=300, bbox_inches='tight')
-#     print(f"Saved visualization: {filename}")
-#     plt.close()
-#
-#     # 2. Create individual centrality visualizations with demand as node size
-#     for centrality_name, centrality_values in centralities.items():
-#         # Check for missing nodes
-#         missing_nodes = [node for node in G.nodes() if node not in centrality_values.index]
-#         if missing_nodes:
-#             print(f"Warning: {len(missing_nodes)} nodes missing from {centrality_name} centrality")
-#             print(f"First few missing nodes: {missing_nodes[:5]}")
-#
-#             # Skip this centrality if too many nodes are missing
-#             if len(missing_nodes) > len(G.nodes()) / 2:
-#                 print(f"Skipping {centrality_name} visualization due to too many missing nodes")
-#                 continue
-#
-#         fig, ax = plt.subplots(figsize=(12, 8))
-#
-#         # Create a list of node colors and sizes
-#         node_colors = []
-#         node_size_list = []
-#
-#         for node in G.nodes():
-#             # Get centrality for color
-#             if node in centrality_values.index:
-#                 node_colors.append(centrality_values[node])
-#             else:
-#                 # Use the minimum value for missing nodes
-#                 node_colors.append(centrality_values.min())
-#
-#             # Get size based on demand
-#             if node in node_sizes:
-#                 node_size_list.append(node_sizes[node])
-#             else:
-#                 node_size_list.append(min_size)  # Default size
-#
-#         # Get valid min/max values for centrality
-#         valid_values = [val for val in node_colors if not np.isnan(val) and not np.isinf(val)]
-#         if not valid_values:
-#             print(f"Skipping {centrality_name} visualization: no valid values")
-#             plt.close()
-#             continue
-#
-#         vmin = min(valid_values)
-#         vmax = max(valid_values)
-#
-#         # Plot nodes with centrality as color and demand as size
-#         node_collection = nx.draw_networkx_nodes(
-#             G, pos,
-#             node_color=node_colors,
-#             node_size=node_size_list,
-#             cmap=plt.cm.OrRd,
-#             vmin=vmin,
-#             vmax=vmax,
-#             ax=ax
-#         )
-#
-#         # Plot edges (uniform style)
-#         nx.draw_networkx_edges(
-#             G, pos,
-#             edge_color='gray',
-#             width=1.0,
-#             alpha=0.3,
-#             ax=ax
-#         )
-#
-#         # Add colorbar for centrality
-#         plt.colorbar(node_collection,
-#                      label=f"{centrality_name.replace('_', ' ').title()} Value")
-#
-#         # Add node category markers for special nodes
-#         for category, node_list in node_types.items():
-#             if category in ['reservoirs', 'tanks', 'valves']:  # Only mark special nodes
-#                 if not node_list:
-#                     continue
-#                 valid_nodes = [node for node in node_list if node in pos]
-#                 if not valid_nodes:
-#                     continue
-#                 x_coords, y_coords = zip(*[pos[node] for node in valid_nodes])
-#                 ax.scatter(x_coords, y_coords,
-#                            marker=node_categories[category]['marker'],
-#                            c=node_categories[category]['color'],
-#                            s=[node_sizes[node] * node_categories[category]['size_factor'] for node in valid_nodes],
-#                            label=category.capitalize(),
-#                            edgecolor='k')
-#
-#         # Add legends
-#         demand_legend = ax.legend(handles=demand_legend_elements, title="Node Demand",
-#                                   loc="lower left", fontsize=10)
-#         ax.add_artist(demand_legend)
-#
-#         node_legend = ax.legend(title="Special Nodes", loc="upper right", fontsize=10)
-#         ax.add_artist(node_legend)
-#
-#         plt.title(f"{centrality_name.replace('_', ' ').title()} Centrality (Node Size = Demand)")
-#         filename = os.path.join(image_dir, f"{centrality_name}_centrality_demand.png")
-#         plt.savefig(filename, dpi=300, bbox_inches='tight')
-#         print(f"Saved visualization: {filename}")
-#         plt.close()
-#
-#     print("All visualizations complete.\n")
 
-
-def complete_graph_visualization(
-    wn: WaterNetworkModel,
-    centralities: Dict[str, pd.Series],
-    simulation_results: Any,
-    pressure_time: int = -1,
-    flow_time: int = -1
-):
+def create_visualization_dictionaries(wn, pure_source_nodes = None, flow_dict = None):
     """
-    Creates network visualization with special symbols for different node types,
-    including sources, and improved node sizing based on demands.
+    Create dictionaries for node sizes, symbols, colors, and scaled flows for network visualization.
 
-    Parameters remain the same as the original function.
+    Parameters:
+    -----------
+    wn : wntr.network.WaterNetworkModel
+        Water network model
+    pure_source_nodes : list, optional
+        List of node names that are pure sources
+    flow_dict : dict, optional
+        Dictionary of flow values for links
+
+    Returns:
+    --------
+    tuple
+        (node_size_dict, node_symbol_dict, scaled_flows)
     """
-    # Create directory for images
-    network_name = os.path.splitext(os.path.basename(wn.name))[0]
-    image_dir = os.path.join('images', network_name)
-    os.makedirs(image_dir, exist_ok=True)
+    if pure_source_nodes is None:
+        pure_source_nodes = []
 
-    # Get source nodes that are not reservoirs or tanks
-    source_nodes = set(get_source_nodes(wn)[0])
-    reservoir_tank_nodes = set(node_name for node_name, node in wn.nodes()
-                             if node.node_type in ['Reservoir', 'Tank'])
-    pure_source_nodes = source_nodes - reservoir_tank_nodes
-
-    # Get pressures and flows with better error handling
-    pressure_dict = {}
-    try:
-        if hasattr(simulation_results.node['pressure'], 'iloc'):
-            pressures = simulation_results.node['pressure'].iloc[pressure_time, :]
-        else:
-            pressures = simulation_results.node['pressure'][pressure_time]
-
-        if isinstance(pressures, pd.Series):
-            pressure_dict = pressures.to_dict()
-        else:
-            pressure_dict = {node: pressures[node] for node in wn.node_name_list}
-    except Exception as e:
-        print(f"Warning: Could not process pressure data: {str(e)}")
-        pressure_dict = {node: 0 for node in wn.node_name_list}
-
-    # Get flows with better error handling
-    flow_dict = {}
-    try:
-        if hasattr(simulation_results.link['flowrate'], 'iloc'):
-            flows = simulation_results.link['flowrate'].iloc[flow_time, :]
-        else:
-            flows = simulation_results.link['flowrate'][flow_time]
-
-        if isinstance(flows, pd.Series):
-            flow_dict = flows.to_dict()
-        else:
-            flow_dict = {link: flows[link] for link in wn.link_name_list}
-    except Exception as e:
-        print(f"Warning: Could not process flow data: {str(e)}")
-        flow_dict = {link: 0 for link in wn.link_name_list}
-
-    # Create node type and size dictionaries
     node_size_dict = {}
     node_symbol_dict = {}
     node_color_dict = {}
@@ -470,7 +129,7 @@ def complete_graph_visualization(
 
     # Process nodes and their demands
     junction_demands = []
-    for node_name, node in wn.nodes():
+    for node_name, node in wn.nodes( ):
         # Set symbol and color based on node type
         node_type = node.node_type
         is_pure_source = node_name in pure_source_nodes
@@ -517,24 +176,89 @@ def complete_graph_visualization(
 
     # Process flows for link widths
     if flow_dict:
-        min_flow = abs(min(flow_dict.values(), key=abs))
-        max_flow = abs(max(flow_dict.values(), key=abs))
+        min_flow = abs(min(flow_dict.values( ), key=abs))
+        max_flow = abs(max(flow_dict.values( ), key=abs))
 
         if (max_flow - min_flow) == 0:
             scaled_flows = {link: 1 for link in flow_dict}
         else:
             scaled_flows = {
                 link: 1 + 7 * (abs(val) - min_flow) / (max_flow - min_flow)
-                for link, val in flow_dict.items()
+                for link, val in flow_dict.items( )
             }
     else:
         scaled_flows = {link: 1 for link in wn.link_name_list}
 
+    return node_size_dict, node_symbol_dict, scaled_flows
+
+
+def complete_graph_visualization(
+        wn: WaterNetworkModel,
+        centralities: Dict[str, pd.Series],
+        simulation_results: Any,
+        pressure_time: int = -1,
+        flow_time: int = -1
+):
+    """
+    Creates network visualization with special symbols for different node types,
+    including sources, and improved node sizing based on demands.
+
+    Parameters remain the same as the original function.
+    """
+    # Create directory for images
+    network_name = os.path.splitext(os.path.basename(wn.name))[0]
+    image_dir = os.path.join('images', network_name)
+    os.makedirs(image_dir, exist_ok=True)
+
+    # Get source nodes that are not reservoirs or tanks
+    source_nodes = set(get_source_nodes(wn)[0])
+    reservoir_tank_nodes = set(node_name for node_name, node in wn.nodes( )
+                               if node.node_type in ['Reservoir', 'Tank'])
+    pure_source_nodes = source_nodes - reservoir_tank_nodes
+
+    # Get pressures and flows with better error handling
+    pressure_dict = {}
+    try:
+        if hasattr(simulation_results.node['pressure'], 'iloc'):
+            pressures = simulation_results.node['pressure'].iloc[pressure_time, :]
+        else:
+            pressures = simulation_results.node['pressure'][pressure_time]
+
+        if isinstance(pressures, pd.Series):
+            pressure_dict = pressures.to_dict( )
+        else:
+            pressure_dict = {node: pressures[node] for node in wn.node_name_list}
+    except Exception as e:
+        print(f"Warning: Could not process pressure data: {str(e)}")
+        pressure_dict = {node: 0 for node in wn.node_name_list}
+
+    # Get flows with better error handling
+    flow_dict = {}
+    try:
+        if hasattr(simulation_results.link['flowrate'], 'iloc'):
+            flows = simulation_results.link['flowrate'].iloc[flow_time, :]
+        else:
+            flows = simulation_results.link['flowrate'][flow_time]
+
+        if isinstance(flows, pd.Series):
+            flow_dict = flows.to_dict( )
+        else:
+            flow_dict = {link: flows[link] for link in wn.link_name_list}
+    except Exception as e:
+        print(f"Warning: Could not process flow data: {str(e)}")
+        flow_dict = {link: 0 for link in wn.link_name_list}
+
+    node_sizes, node_symbols, flows = create_visualization_dictionaries(
+        wn,
+        pure_source_nodes=pure_source_nodes,
+        flow_dict=flow_dict
+    )
+
     # Create node popup info
     node_popup_info = pd.DataFrame(index=wn.node_name_list)
     node_popup_info['Node Type'] = ['Source' if node in pure_source_nodes
-                                   else wn.get_node(node).node_type
-                                   for node in wn.node_name_list]
+                                    else wn.get_node(node).node_type
+                                    for node in wn.node_name_list]
 
     # Plot network with all attributes
     plot_interactive_network_with_links(
@@ -542,44 +266,70 @@ def complete_graph_visualization(
         node_attribute=pressure_dict,
         node_attribute_name="Pressure",
         title="Network: Pressures and Flow",
-        node_size_dict=node_size_dict,
-        node_symbol_dict=node_symbol_dict,
-        link_width=scaled_flows,
+        node_size_dict=node_sizes,
+        node_symbol_dict=node_symbols,
+        link_width=flows,
         add_to_node_popup=node_popup_info,
         filename=os.path.join(image_dir, "flow_and_pressure.html"),
         auto_open=False
     )
 
     # Plot centrality measures
-    for centrality_name, centrality_series in centralities.items():
+    scenarios = create_directory_structure(image_dir)
+
+    for centrality_name, centrality_series in centralities.items( ):
+        # Helper function to determine the subfolder based on weight_name
+        # TODO
+        weight_name = None
+
+        def get_weight_subfolder():
+            if weight_name is None:
+                return 'unweighted'
+            return 'weighted'
+
         if isinstance(centrality_series, dict):
             centrality_dict = centrality_series
         else:
-            centrality_dict = centrality_series.to_dict()
+            centrality_dict = centrality_series.to_dict( )
 
+        # Determine the appropriate scenario folder
+        target_dir = image_dir  # Default to main directory
+
+        # Check if it's a specific case (contains node reference)
+        if '_on_' in centrality_name:
+            for scenario in scenarios.keys( ):
+                if any(metric in centrality_name for metric in scenarios[scenario]):
+                    target_dir = os.path.join(image_dir, scenario, 'specific_cases')
+                    break
+        else:
+            # Check for general scenario cases
+            for scenario, metrics in scenarios.items( ):
+                if any(metric in centrality_name for metric in metrics):
+                    target_dir = os.path.join(image_dir, scenario, get_weight_subfolder( ))
+                    break
+
+        # Create the plot in the appropriate directory
         plot_interactive_network_with_links(
             wn,
             node_attribute=centrality_dict,
             node_attribute_name=centrality_name,
             title=f"Centrality: {centrality_name}",
-            node_size_dict=node_size_dict,
-            node_symbol_dict=node_symbol_dict,
-            filename=os.path.join(image_dir, f"centrality_{centrality_name}.html"),
+            node_size_dict=node_sizes,
+            node_symbol_dict=node_symbols,
+            filename=os.path.join(target_dir, f"centrality_{centrality_name}.html"),
             auto_open=False
         )
 
-    print(f"Plots generated successfully in {image_dir}.")
 
-
-def plot_interactive_network_with_links(wn, node_attribute=None, node_attribute_name='Value',
-                                      title=None, node_size=8, node_size_dict=None,
-                                      node_symbol_dict=None,
-                                      node_range=[None, None], node_cmap='Jet',
-                                      node_labels=True, link_width=1,
-                                      add_colorbar=True, reverse_colormap=False,
-                                      figsize=[700, 450], round_ndigits=2,
-                                      add_to_node_popup=None, filename='plotly_network.html',
-                                      auto_open=True):
+def plot_interactive_network_with_links(wn, node_attribute = None, node_attribute_name = 'Value',
+                                        title = None, node_size = 8, node_size_dict = None,
+                                        node_symbol_dict = None,
+                                        node_range = [None, None], node_cmap = 'Jet',
+                                        node_labels = True, link_width = 1,
+                                        add_colorbar = True, reverse_colormap = False,
+                                        figsize = [700, 450], round_ndigits = 2,
+                                        add_to_node_popup = None, filename = 'plotly_network.html',
+                                        auto_open = True):
     """
         Interactive network plot with variable line widths, edge orientation, and variable node sizes.
 
@@ -627,7 +377,7 @@ def plot_interactive_network_with_links(wn, node_attribute=None, node_attribute_
     if plotly is None:
         raise ImportError('plotly is required')
 
-    G = wn.to_graph()
+    G = wn.to_graph( )
 
     # Process node_attribute
     if node_attribute is not None:
@@ -640,11 +390,11 @@ def plot_interactive_network_with_links(wn, node_attribute=None, node_attribute_
 
     # Create edge traces
     node_pair_to_link = {}
-    for link_name, link in wn.links():
+    for link_name, link in wn.links( ):
         node_pair_to_link[(link.start_node_name, link.end_node_name)] = link_name
 
     edge_traces = []
-    for edge in G.edges():
+    for edge in G.edges( ):
         x0, y0 = G.nodes[edge[0]]['pos']
         x1, y1 = G.nodes[edge[1]]['pos']
         link_name = node_pair_to_link.get(edge)
@@ -685,7 +435,7 @@ def plot_interactive_network_with_links(wn, node_attribute=None, node_attribute_
     node_traces = {}
 
     # Process nodes
-    for node in G.nodes():
+    for node in G.nodes( ):
         x, y = G.nodes[node]['pos']
 
         # Determine node symbol
@@ -740,7 +490,7 @@ def plot_interactive_network_with_links(wn, node_attribute=None, node_attribute_
 
     # Create Scatter traces for each symbol group
     node_scatter_traces = []
-    for symbol, trace_data in node_traces.items():
+    for symbol, trace_data in node_traces.items( ):
         scatter = plotly.graph_objs.Scatter(
             x=trace_data['x'],
             y=trace_data['y'],
@@ -811,11 +561,12 @@ def _format_node_attribute(node_attribute, wn):
             attr_dict[node] = 1.0
         return attr_dict
     elif isinstance(node_attribute, pd.Series):
-        return node_attribute.to_dict()
+        return node_attribute.to_dict( )
     elif isinstance(node_attribute, dict):
         return node_attribute
     else:
         return {node_name: 0.0 for node_name in wn.node_name_list}
+
 
 def main():
     # Path to an example INP file. Adjust as needed.
@@ -829,29 +580,35 @@ def main():
 
     # 3. EPANET Simulation
     epanet_results = run_epanet_simulation(wn)
-    analyze_hydraulic_results(epanet_results, node_name='1')  # Replace with valid node
+    analyze_hydraulic_results(epanet_results, node_name=wn.get_node(
+        wn.node_name_list[random.randint(0, 10)]))  # Replace with valid node
+
+    flow_values = epanet_results.link['flowrate']
+    flows = flow_values.loc[random.randint(0, 23) * 3600].to_dict( )
+    reorient_edges_by_flow(wn, flows=flows)
 
     # 4. WNTR Simulation
     # wntr_results = run_wntr_simulation(wn)
     # analyze_hydraulic_results(wntr_results, node_name='1')
 
-    # 5. Resilience Metrics
-    # calculate_tondini(wn, wntr_results)
-
-    # 6. (Optional) Water Quality Simulation
-    sim = wntr.sim.EpanetSimulator(wn)
-    results = sim.run_sim()
-    print(results)
-    print("Water quality simulation complete.\n")
+    # 5. Tondini Index
+    try:
+        results = epanet_results
+        tondini_index = wntr.metrics.hydraulic.todini_index(results.node["head"], results.node["pressure"],
+                                                            results.node["demand"], results.link["flowrate"], wn,
+                                                            Pstar=15)
+        print(f"Todini Resilience Index: {tondini_index.mean( )} (average over all timesteps)")
+    except Exception as e:
+        print(f"Error computing Todini index: {e}")
 
     # 7. Morphological transformations (skeletonization)
 
     # Calculate the median pipe diameter
-    pipe_diameters = [pipe.diameter for _, pipe in wn.pipes()]
+    pipe_diameters = [pipe.diameter for _, pipe in wn.pipes( )]
     median_diameter = np.median(pipe_diameters)
 
     # Perform skeletonization using the median diameter as threshold
-    wn_skel = skeletonize(wn, pipe_diameter_threshold= median_diameter, return_copy=True)
+    wn_skel = skeletonize(wn, pipe_diameter_threshold=median_diameter, return_copy=True)
     print("Skeletonized Network!")
     print_basic_network_info(wn_skel)
 
@@ -861,22 +618,25 @@ def main():
 
     # 9. Improve edge orientation
     # Get initial atypical nodes
-    _, initial_atypical = get_source_nodes(wn)
-    try:
-        num_reoriented, remaining_atypical = reorient_edges_by_pressure(wn, verbose=True)
-        print(f"\nSummary:")
-        print(f"- Reoriented {num_reoriented} edges")
-        print(f"- Reduced atypical nodes from {len(initial_atypical)} to {len(remaining_atypical)}")
-    except Exception as e:
-        print(f"Error during edge reorientation: {str(e)}")
-
-
+    # _, initial_atypical = get_source_nodes(wn)
+    # try:
+    #     num_reoriented, remaining_atypical = reorient_edges_by_pressure(wn, verbose=True)
+    #     print(f"\nSummary:")
+    #     print(f"- Reoriented {num_reoriented} edges")
+    #     print(f"- Reduced atypical nodes from {len(initial_atypical)} to {len(remaining_atypical)}")
+    # except Exception as e:
+    #     print(f"Error during edge reorientation: {str(e)}")
 
     # 10. Graph Visualization
     centralities = calculate_network_metrics(wn)
     complete_graph_visualization(wn, centralities, simulation_results=results)
 
-    print("\n=== Finished all demonstrations! ===")
+    network_name = os.path.splitext(os.path.basename(wn.name))[0]
+    image_dir = os.path.join('images', network_name)
+    analyze_distributions(centralities, base_dir=image_dir)
+    similar_pairs = correlation_analysis(centralities, base_dir=image_dir, correlation_threshold=0.8)
+    print("Similar centralities based on the threshold:", similar_pairs)
+
 
 if __name__ == "__main__":
-    main()
+    main( )
